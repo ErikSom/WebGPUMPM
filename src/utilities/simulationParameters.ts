@@ -17,6 +17,8 @@ export const numG = nxG * nyG * nzG; // Total number of grid nodes
 export const numGPadded = getNumGPadded(numG); // Total number of grid nodes but padded with 0s (For stream compaction purposes)
 export const sweepIters = ilog2ceil(numGPadded) - 1;  // Number of iterations to iterate over in up sweep and down sweep in stream compaction
 
+console.log(nxG, nyG, nzG, numG, numGPadded, sweepIters);
+
 // Particle Attributes
 export const E = 15000.0;  // Young's Modulus (Hardness)
 export const E0 = 14000; // Initial Young's Modulus (for snow)

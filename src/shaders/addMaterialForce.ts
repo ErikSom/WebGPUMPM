@@ -1,414 +1,275 @@
-export const addMaterialForceShader = {
-  addMaterialForce: (numPArg: number, numGArg: number, numGPaddedArg: number) => `#version 450
-  layout(std140, set = 0, binding = 0) uniform SimParams {
-    float dt; // Timestep
-    float gravityX;  // Gravity (x-component)
-    float gravityY;  // Gravity (y-component)
-    float gravityZ;  // Gravity (z-component)
-    float minCornerX; // Min corner of the grid (x-component) (also works as the origin of the grid for offsetting purposes)
-    float minCornerY; // Min corner of the grid (y-component) (also works as the origin of the grid for offsetting purposes)
-    float minCornerZ; // Min corner of the grid (z-component) (also works as the origin of the grid for offsetting purposes)
-    float maxCornerX;  // Max corner of the grid (x-component)
-    float maxCornerY;  // Max corner of the grid (y-component)
-    float maxCornerZ;  // Max corner of the grid (z-component)
-    float h; // Cell width of the grid
-    float nxG;  // Number of grid points in the x-direction
-    float nyG;  // Number of grid points in the y-direction
-    float nzG;  // Number of grid points in the z-direction
-    float numG; // Total number of grid points
-    float E;  // Young's Modulus (Hardness)
-    float E0; // Initial Young's Modulus (for snow)
-    float nu; // Poisson's Ratio (Incompressibility)
-    float nuSnow; // Poisson's Ratio (for snow)
-    float thetaC; // Critical compression (for snow)
-    float thetaS;  // Critical stretch (for snow)
-    float xi;  // Hardening coefficient (for snow)
-    float mu;  // One of the Lamé parameters
-    float lambda;  // One of the Lamé parameters
-    float lambdaFluid; // parameter for fluid
-    float gamma;  // parameter for fluid
-    float rhoJello;  // Density of the points' material for jello
-    float rhoSnow;  // Density of the points' material for snow
-    float rhoFluid; // Density of the points' material for fluid
-    float numP;  // Total number of points
-    float PADDING_1; // IGNORE
-    float PADDING_2; // IGNORE
-  } params;
-  struct ParticleStruct1 {
-    vec4 pos; // (pos.xyz => Particle Position, pos.w => Particle Material Type)
-    vec4 v; // (v.xyz => Particle Velocity, v.w => Particle Mass)
-  };
-  struct ParticleStruct2 {
-    mat3 F; // Deformation Graident Of The Particle
-    mat3 Fe;  // Elastic Component Of The Deformation Gradient Of The Particle
-    mat3 Fp;  // Plastic Component Of The Deformation Gradient Of The Particle
-    mat3 C; // APIC's C Matrix Of The Particle
-    float J;  // J attribute Of The Particle
-    float vol;  // Volume Of The Particle
-    float PADDING_1;  // (IGNORE)
-    float PADDING_2;  // (IGNORE)
-  };
-  struct GridNodeStruct {
-    vec3 vN;  // New Velocity Stored On The Grid Node
-    vec3 v; // Old Velocity Stored On The Grid Node
-    vec3 force; // Force Stored On The Grid Node
-    float m;  // Mass Stored On The Grid Node
-    float PADDING_1;  // (IGNORE)
-    float PADDING_2;  // (IGNORE)
-    float PADDING_3;  // (IGNORE)
-  };
-  struct StreamCompStruct {
-    float criteria; // Criteria (Only Has Value 0 Or 1)
-    float scan; // Scan Result (Result Of Exclusive Scanning The Criteria Buffer)
-    float compact; // Stream Compaction Result (Final Result Of Stream Compaction After Scattering)
-    float d; // Iteration Depth (Storing The Current Iteration Depth In Up-Sweep And Down-Sweep)
-  };
-  layout(std430, set = 0, binding = 1) buffer PARTICLES1 {
-    ParticleStruct1 data[${numPArg}];
-  } particles1;
-  layout(std430, set = 0, binding = 2) buffer PARTICLES2 {
-    ParticleStruct2 data[${numPArg}];
-  } particles2;
-  layout(std430, set = 0, binding = 3) buffer GRIDNODES {
-    GridNodeStruct data[${numGArg}];
-  } gridNodes;
-  layout(std430, set = 0, binding = 4) buffer STREAMCOMPACTION {
-    StreamCompStruct data[${numGPaddedArg}];
-  } SC;
+import { layout, particleStruct, gridStruct, steamCompStruct, structLayout, coordinateToId } from "./struct";
 
-  // Compute weights (when each thread handles a particle)
-  void computeWeights1D_P(float x, out vec3 w, out vec3 dw, out int baseNode) {
-    // x is the particle's index-space position and can represent particle's index-space position in x, y, or z direction,
-    // baseNode can also represent the baseNode in x, y, or z direction, depending on how this function is used
-    // Note that here we compute the 1D quadratic B spline weights and
-    // x is assumed to be scaled in the index space (in other words, the grid has cell width of length 1)
-    baseNode = int(floor(x - 0.5));
-    float d0 = x - baseNode;
-    w[0] = 0.5 * (1.5 - d0) * (1.5 - d0);
-    dw[0] = d0 - 1.5;
-    float d1 = x - (baseNode + 1);
-    w[1] = 0.75 - d1 * d1;
-    dw[1] = -2 * d1;
-    float d2 = x - (baseNode + 2);
-    w[2] = 0.5 * (1.5 + d2) * (1.5 + d2);
-    dw[2] = 1.5 + d2;
+export const addMaterialForceShader = {
+  addMaterialForce: (numPArg: number, numGArg: number, numGPaddedArg: number) => `
+  ${layout}
+  ${particleStruct}
+  ${gridStruct}
+  ${steamCompStruct}
+  ${structLayout(numPArg, numGArg, numGPaddedArg)}
+  ${coordinateToId}
+
+  fn computeWeights1D_P(x: f32, w: ptr<function, array<f32, 3>>, dw: ptr<function, array<f32, 3>>) -> i32 {
+    let baseNode: i32 = i32(floor(x - 0.5));
+    let d0: f32 = x - f32(baseNode);
+    (*w)[0] = 0.5 * (1.5 - d0) * (1.5 - d0);
+    (*dw)[0] = d0 - 1.5;
+    let d1: f32 = x - f32(baseNode + 1);
+    (*w)[1] = 0.75 - d1 * d1;
+    (*dw)[1] = -2.0 * d1;
+    let d2: f32 = x - f32(baseNode + 2);
+    (*w)[2] = 0.5 * (1.5 + d2) * (1.5 + d2);
+    (*dw)[2] = 1.5 + d2;
+    return baseNode;
   }
-  // Compute weights (when each thread handles a grid node) (Version 1: Tested)
-  void computeWeights1D_G(int node, float x, out float w, out float dw) {
-    // x is the particle's index-space position and can represent particle's index-space position in x, y, or z direction,
-    // x is assumed to be scaled in the index space (in other words, the grid has cell width of length 1)
-    // node is the grid node's coordinate in x, y, or z direction in index space
-    float d = x - node;
+
+  fn computeWeights1D_G(node: i32, x: f32, w: ptr<function, f32>, dw: ptr<function, f32>) {
+    let d: f32 = x - f32(node);
     if (abs(d) < 1.5) {
-      if (d >= 0.5 && d < 1.5) {  // [0.5, 1.5)
-        w = 0.5 * (1.5 - d) * (1.5 - d);
-        dw = d - 1.5;
-      } else if (d > -0.5 && d < 0.5) { // (-0.5, 0.5)
-        w = 0.75 - d * d;
-        dw = -2 * d;
-      } else {  // (-1.5, -0.5]
-        w = 0.5 * (1.5 + d) * (1.5 + d);
-        dw = 1.5 + d;
-      }
+        if (d >= 0.5 && d < 1.5) {
+            (*w) = 0.5 * (1.5 - d) * (1.5 - d);
+            (*dw) = d - 1.5;
+        } else if (d > -0.5 && d < 0.5) {
+            (*w) = 0.75 - d * d;
+            (*dw) = -2.0 * d;
+        } else {
+            (*w) = 0.5 * (1.5 + d) * (1.5 + d);
+            (*dw) = 1.5 + d;
+        }
     } else {
-      w = 0;
-      dw = 0;
+        (*w) = 0.0;
+        (*dw) = 0.0;
     }
   }
-  // // Compute weights (when each thread handles a grid node) (Version 2: Untested) (Less branching than Version 1)
-  // void computeWeights1D_G(int node, float x, out float w, out float dw) {
-  //   // x is the particle's index-space position and can represent particle's index-space position in x, y, or z direction,
-  //   // x is assumed to be scaled in the index space (in other words, the grid has cell width of length 1)
-  //   // node is the grid node's coordinate in x, y, or z direction in index space
-  //   float d = x - node;
-  //   if (abs(d) < 1.5) {
-  //     if (d > -0.5 && d < 0.5) { // (-0.5, 0.5)
-  //       w = 0.75 - d * d;
-  //       dw = -2 * d;
-  //     } else {
-  //       w = 0.5 * (1.5 - abs(d)) * (1.5 - abs(d));
-  //       float s = sign(d);
-  //       dw = s * (abs(d) - 1.5);
-  //     }
-  //   } else {
-  //     w = 0;
-  //     dw = 0;
-  //   }
-  // }
-  /* ---------------------------------------------------------------------------- */
-  /* ----------------------------- SVD START ------------------------------------ */
-  /* ---------------------------------------------------------------------------- */
-  // This is a GLSL implementation of
-  // "Computing the Singular Value Decomposition of 3 x 3 matrices with
-  // minimal branching and elementary floating point operations"
-  // by Aleka McAdams et.al.
-  // http://pages.cs.wisc.edu/~sifakis/papers/SVD_TR1690.pdf
-  // This should also work on the CPU using glm
-  // Then you probably should use glm::quat instead of vec4
-  // and mat3_cast to convert to mat3.
-  // GAMMA = 3 + sqrt(8)
-  // C_STAR = cos(pi/8)
-  // S_STAR = sin(pi/8)
-  #define GAMMA 5.8284271247
-  #define C_STAR 0.9238795325
-  #define S_STAR 0.3826834323
-  #define SVD_EPS 0.0000001
-  vec2 approx_givens_quat(float s_pp, float s_pq, float s_qq) {
-      float c_h = 2 * (s_pp - s_qq);
-      float s_h2 = s_pq * s_pq;
-      float c_h2 = c_h * c_h;
-      if (GAMMA * s_h2 < c_h2) {
-          float omega = 1.0f / sqrt(s_h2 + c_h2);
-          return vec2(omega * c_h, omega * s_pq);
-      }
-      return vec2(C_STAR, S_STAR);
+
+// Helper Functions for SVD
+fn approx_givens_quat(s_pp: f32, s_pq: f32, s_qq: f32) -> vec2<f32> {
+    let gamma = 5.8284271247;
+    let c_star = 0.9238795325;
+    let s_star = 0.3826834323;
+    let c_h = 2.0 * (s_pp - s_qq);
+    let s_h2 = s_pq * s_pq;
+    let c_h2 = c_h * c_h;
+    if (gamma * s_h2 < c_h2) {
+        let omega = 1.0 / sqrt(s_h2 + c_h2);
+        return vec2<f32>(omega * c_h, omega * s_pq);
+    }
+    return vec2<f32>(c_star, s_star);
+}
+
+fn quat_to_mat3(quat: vec4<f32>) -> mat3x3<f32> {
+    let qx2 = quat.y * quat.y;
+    let qy2 = quat.z * quat.z;
+    let qz2 = quat.w * quat.w;
+    let qwqx = quat.x * quat.y;
+    let qwqy = quat.x * quat.z;
+    let qwqz = quat.x * quat.w;
+    let qxqy = quat.y * quat.z;
+    let qxqz = quat.y * quat.w;
+    let qyqz = quat.z * quat.w;
+    return mat3x3<f32>(
+        vec3<f32>(1.0 - 2.0 * (qy2 + qz2), 2.0 * (qxqy + qwqz), 2.0 * (qxqz - qwqy)),
+        vec3<f32>(2.0 * (qxqy - qwqz), 1.0 - 2.0 * (qx2 + qz2), 2.0 * (qyqz + qwqx)),
+        vec3<f32>(2.0 * (qxqz + qwqy), 2.0 * (qyqz - qwqx), 1.0 - 2.0 * (qx2 + qy2))
+    );
+}
+
+fn symmetric_eigenanalysis(A: mat3x3<f32>) -> mat3x3<f32> {
+    var S = transpose(A) * A;
+    var q = mat3x3<f32>(
+      vec3<f32>(1.0, 0.0, 0.0),
+      vec3<f32>(0.0, 1.0, 0.0),
+      vec3<f32>(0.0, 0.0, 1.0)
+    );
+    for (var i = 0; i < 5; i++) {
+        var ch_sh = approx_givens_quat(S[0][0], S[0][1], S[1][1]);
+        var ch_sh_quat = vec4<f32>(ch_sh.x, 0.0, 0.0, ch_sh.y);
+        var q_mat = quat_to_mat3(ch_sh_quat);
+        S = transpose(q_mat) * S * q_mat;
+        q = q * q_mat;
+
+        ch_sh = approx_givens_quat(S[0][0], S[0][2], S[2][2]);
+        ch_sh_quat = vec4<f32>(ch_sh.x, 0.0, -ch_sh.y, 0.0);
+        q_mat = quat_to_mat3(ch_sh_quat);
+        S = transpose(q_mat) * S * q_mat;
+        q = q * q_mat;
+
+        ch_sh = approx_givens_quat(S[1][1], S[1][2], S[2][2]);
+        ch_sh_quat = vec4<f32>(ch_sh.x, ch_sh.y, 0.0, 0.0);
+        q_mat = quat_to_mat3(ch_sh_quat);
+        S = transpose(q_mat) * S * q_mat;
+        q = q * q_mat;
+    }
+    return q;
+}
+
+fn approx_qr_givens_quat(a0: f32, a1: f32) -> vec2<f32> {
+    let rho = sqrt(a0 * a0 + a1 * a1);
+    let s_h = a1;
+    let max_rho_eps = rho;
+    if (rho <= 0.0000001) {
+        return vec2<f32>(1.0, 0.0);
+    }
+    let c_h = max_rho_eps + a0;
+    if (a0 < 0.0) {
+        let temp = c_h - 2.0 * a0;
+        return vec2<f32>(s_h, temp);
+    }
+    let omega = 1.0 / sqrt(c_h * c_h + s_h * s_h);
+    return vec2<f32>(omega * c_h, omega * s_h);
+}
+
+struct QR_mats {
+    Q: mat3x3<f32>,
+    R: mat3x3<f32>,
+};
+
+fn qr_decomp(B: mat3x3<f32>) -> QR_mats {
+    var R = B;
+    var ch_sh10 = approx_qr_givens_quat(R[0][0], R[0][1]);
+    var Q10 = quat_to_mat3(vec4<f32>(ch_sh10.x, 0.0, 0.0, ch_sh10.y));
+    R = transpose(Q10) * R;
+
+    var ch_sh20 = approx_qr_givens_quat(R[0][0], R[0][2]);
+    var Q20 = quat_to_mat3(vec4<f32>(ch_sh20.x, 0.0, -ch_sh20.y, 0.0));
+    R = transpose(Q20) * R;
+
+    var ch_sh21 = approx_qr_givens_quat(R[1][1], R[1][2]);
+    var Q21 = quat_to_mat3(vec4<f32>(ch_sh21.x, ch_sh21.y, 0.0, 0.0));
+    R = transpose(Q21) * R;
+
+    return QR_mats(Q10 * Q20 * Q21, R);
+}
+
+struct SVD_mats {
+    U: mat3x3<f32>,
+    Sigma: mat3x3<f32>,
+    V: mat3x3<f32>,
+};
+
+fn svd(A: mat3x3<f32>) -> SVD_mats {
+    var svd_result: SVD_mats;
+    svd_result.V = symmetric_eigenanalysis(A);
+    var B = A * svd_result.V;
+
+    let rho0 = dot(B[0], B[0]);
+    let rho1 = dot(B[1], B[1]);
+    let rho2 = dot(B[2], B[2]);
+    if (rho0 < rho1) {
+        let temp = B[1];
+        B[1] = -B[0];
+        B[0] = temp;
+        let tempV = svd_result.V[1];
+        svd_result.V[1] = -svd_result.V[0];
+        svd_result.V[0] = tempV;
+    }
+    if (rho0 < rho2) {
+        let temp = B[2];
+        B[2] = -B[0];
+        B[0] = temp;
+        let tempV = svd_result.V[2];
+        svd_result.V[2] = -svd_result.V[0];
+        svd_result.V[0] = tempV;
+    }
+    if (rho1 < rho2) {
+        let temp = B[2];
+        B[2] = -B[1];
+        B[1] = temp;
+        let tempV = svd_result.V[2];
+        svd_result.V[2] = -svd_result.V[1];
+        svd_result.V[1] = tempV;
+    }
+
+    let QR = qr_decomp(B);
+    svd_result.U = QR.Q;
+    svd_result.Sigma = QR.R;
+    return svd_result;
   }
-  // the quaternion is stored in vec4 like so:
-  // (c, s * vec3) meaning that .x = c
-  mat3 quat_to_mat3(vec4 quat) {
-      float qx2 = quat.y * quat.y;
-      float qy2 = quat.z * quat.z;
-      float qz2 = quat.w * quat.w;
-      float qwqx = quat.x * quat.y;
-      float qwqy = quat.x * quat.z;
-      float qwqz = quat.x * quat.w;
-      float qxqy = quat.y * quat.z;
-      float qxqz = quat.y * quat.w;
-      float qyqz = quat.z * quat.w;
-      return mat3(1.0f - 2.0f * (qy2 + qz2), 2.0f * (qxqy + qwqz), 2.0f * (qxqz - qwqy),
-          2.0f * (qxqy - qwqz), 1.0f - 2.0f * (qx2 + qz2), 2.0f * (qyqz + qwqx),
-          2.0f * (qxqz + qwqy), 2.0f * (qyqz - qwqx), 1.0f - 2.0f * (qx2 + qy2));
+
+  // Fixed Corotated Functions
+  fn fixedCorotated(F: mat3x3<f32>) -> mat3x3<f32> {
+      let F_SVD = svd(F);
+      let R = F_SVD.U * transpose(F_SVD.V);
+      let J = determinant(F);
+      var dJdF = mat3x3<f32>(
+        vec3<f32>(F[1][1] * F[2][2] - F[1][2] * F[2][1], F[0][2] * F[2][1] - F[0][1] * F[2][2], F[0][1] * F[1][2] - F[0][2] * F[1][1]),
+        vec3<f32>(F[1][2] * F[2][0] - F[1][0] * F[2][2], F[0][0] * F[2][2] - F[0][2] * F[2][0], F[0][2] * F[1][0] - F[0][0] * F[1][2]),
+        vec3<f32>(F[1][0] * F[2][1] - F[1][1] * F[2][0], F[0][1] * F[2][0] - F[0][0] * F[2][1], F[0][0] * F[1][1] - F[0][1] * F[1][0])
+      );
+      return 2.0 * params.mu * (F - R) + params.lambda * (J - 1.0) * dJdF;
   }
-  mat3 symmetric_eigenanalysis(mat3 A) {
-      mat3 S = transpose(A) * A;
-      // jacobi iteration
-      mat3 q = mat3(1.0f);
-      for (int i = 0; i < 5; i++) {
-          vec2 ch_sh = approx_givens_quat(S[0].x, S[0].y, S[1].y);
-          vec4 ch_sh_quat = vec4(ch_sh.x, 0, 0, ch_sh.y);
-          mat3 q_mat = quat_to_mat3(ch_sh_quat);
-          S = transpose(q_mat) * S * q_mat;
-          q = q * q_mat;
-          ch_sh = approx_givens_quat(S[0].x, S[0].z, S[2].z);
-          ch_sh_quat = vec4(ch_sh.x, 0, -ch_sh.y, 0);
-          q_mat = quat_to_mat3(ch_sh_quat);
-          S = transpose(q_mat) * S * q_mat;
-          q = q * q_mat;
-          ch_sh = approx_givens_quat(S[1].y, S[1].z, S[2].z);
-          ch_sh_quat = vec4(ch_sh.x, ch_sh.y, 0, 0);
-          q_mat = quat_to_mat3(ch_sh_quat);
-          S = transpose(q_mat) * S * q_mat;
-          q = q * q_mat;
-      }
-      return q;
+
+  fn fixedCorotatedSnow(Fe: mat3x3<f32>, Fp: mat3x3<f32>) -> mat3x3<f32> {
+      let Fe_SVD = svd(Fe);
+      let R = Fe_SVD.U * transpose(Fe_SVD.V);
+      let Je = determinant(Fe);
+      var dJedFe = mat3x3<f32>(
+          vec3<f32>(Fe[1][1] * Fe[2][2] - Fe[1][2] * Fe[2][1], Fe[0][2] * Fe[2][1] - Fe[0][1] * Fe[2][2], Fe[0][1] * Fe[1][2] - Fe[0][2] * Fe[1][1]),
+          vec3<f32>(Fe[1][2] * Fe[2][0] - Fe[1][0] * Fe[2][2], Fe[0][0] * Fe[2][2] - Fe[0][2] * Fe[2][0], Fe[0][2] * Fe[1][0] - Fe[0][0] * Fe[1][2]),
+          vec3<f32>(Fe[1][0] * Fe[2][1] - Fe[1][1] * Fe[2][0], Fe[0][1] * Fe[2][0] - Fe[0][0] * Fe[2][1], Fe[0][0] * Fe[1][1] - Fe[0][1] * Fe[1][0])
+      );
+      let Jp = determinant(Fp);
+      let ESnowCurrent = params.E0 * exp(params.xi * (1.0 - Jp));
+      let muSnow = ESnowCurrent / (2.0 * (1.0 + params.nuSnow));
+      let lambdaSnow = ESnowCurrent * params.nuSnow / ((1.0 + params.nuSnow) * (1.0 - 2.0 * params.nuSnow));
+      return 2.0 * muSnow * (Fe - R) + lambdaSnow * (Je - 1.0) * dJedFe;
   }
-  vec2 approx_qr_givens_quat(float a0, float a1) {
-      float rho = sqrt(a0 * a0 + a1 * a1);
-      float s_h = a1;
-      float max_rho_eps = rho;
-      if (rho <= SVD_EPS) {
-          s_h = 0;
-          max_rho_eps = SVD_EPS;
-      }
-      float c_h = max_rho_eps + a0;
-      if (a0 < 0) {
-          float temp = c_h - 2 * a0;
-          c_h = s_h;
-          s_h = temp;
-      }
-      float omega = 1.0f / sqrt(c_h * c_h + s_h * s_h);
-      return vec2(omega * c_h, omega * s_h);
-  }
-  struct QR_mats {
-      mat3 Q;
-      mat3 R;
-  };
-  QR_mats qr_decomp(mat3 B) {
-      QR_mats qr_decomp_result;
-      mat3 R;
-      // 1 0
-      // (ch, 0, 0, sh)
-      vec2 ch_sh10 = approx_qr_givens_quat(B[0].x, B[0].y);
-      mat3 Q10 = quat_to_mat3(vec4(ch_sh10.x, 0, 0, ch_sh10.y));
-      R = transpose(Q10) * B;
-      // 2 0
-      // (ch, 0, -sh, 0)
-      vec2 ch_sh20 = approx_qr_givens_quat(R[0].x, R[0].z);
-      mat3 Q20 = quat_to_mat3(vec4(ch_sh20.x, 0, -ch_sh20.y, 0));
-      R = transpose(Q20) * R;
-      // 2 1
-      // (ch, sh, 0, 0)
-      vec2 ch_sh21 = approx_qr_givens_quat(R[1].y, R[1].z);
-      mat3 Q21 = quat_to_mat3(vec4(ch_sh21.x, ch_sh21.y, 0, 0));
-      R = transpose(Q21) * R;
-      qr_decomp_result.R = R;
-      qr_decomp_result.Q = Q10 * Q20 * Q21;
-      return qr_decomp_result;
-  }
-  struct SVD_mats {
-      mat3 U;
-      mat3 Sigma;
-      mat3 V;
-  };
-  SVD_mats svd(mat3 A) {
-      SVD_mats svd_result;
-      svd_result.V = symmetric_eigenanalysis(A);
-      mat3 B = A * svd_result.V;
-      // sort singular values
-      float rho0 = dot(B[0], B[0]);
-      float rho1 = dot(B[1], B[1]);
-      float rho2 = dot(B[2], B[2]);
-      if (rho0 < rho1) {
-          vec3 temp = B[1];
-          B[1] = -B[0];
-          B[0] = temp;
-          temp = svd_result.V[1];
-          svd_result.V[1] = -svd_result.V[0];
-          svd_result.V[0] = temp;
-          float temp_rho = rho0;
-          rho0 = rho1;
-          rho1 = temp_rho;
-      }
-      if (rho0 < rho2) {
-          vec3 temp = B[2];
-          B[2] = -B[0];
-          B[0] = temp;
-          temp = svd_result.V[2];
-          svd_result.V[2] = -svd_result.V[0];
-          svd_result.V[0] = temp;
-          rho2 = rho0;
-      }
-      if (rho1 < rho2) {
-          vec3 temp = B[2];
-          B[2] = -B[1];
-          B[1] = temp;
-          temp = svd_result.V[2];
-          svd_result.V[2] = -svd_result.V[1];
-          svd_result.V[1] = temp;
-      }
-      QR_mats QR = qr_decomp(B);
-      svd_result.U = QR.Q;
-      svd_result.Sigma = QR.R;
-      return svd_result;
-  }
-  /* ---------------------------------------------------------------------------- */
-  /* ----------------------------- SVD END ------------------------------------ */
-  /* ---------------------------------------------------------------------------- */
-  mat3 fixedCorotated(mat3 F) {
-    SVD_mats F_SVD = svd(F);
-    mat3 R = F_SVD.U * transpose(F_SVD.V);
-    float J = determinant(F);
-    mat3 dJdF;
-    dJdF[0][0] = F[1][1] * F[2][2] - F[1][2] * F[2][1];
-    dJdF[1][0] = F[0][2] * F[2][1] - F[0][1] * F[2][2];
-    dJdF[2][0] = F[0][1] * F[1][2] - F[0][2] * F[1][1];
-    dJdF[0][1] = F[1][2] * F[2][0] - F[1][0] * F[2][2];
-    dJdF[1][1] = F[0][0] * F[2][2] - F[0][2] * F[2][0];
-    dJdF[2][1] = F[0][2] * F[1][0] - F[0][0] * F[1][2];
-    dJdF[0][2] = F[1][0] * F[2][1] - F[1][1] * F[2][0];
-    dJdF[1][2] = F[0][1] * F[2][0] - F[0][0] * F[2][1];
-    dJdF[2][2] = F[0][0] * F[1][1] - F[0][1] * F[1][0];
-    return 2 * params.mu * (F - R) + params.lambda * (J - 1) * dJdF;
-  }
-  mat3 fixedCorotatedSnow(mat3 Fe, mat3 Fp) {
-    SVD_mats Fe_SVD = svd(Fe);
-    mat3 R = Fe_SVD.U * transpose(Fe_SVD.V);
-    float Je = determinant(Fe);
-    mat3 dJedFe;
-    dJedFe[0][0] = Fe[1][1] * Fe[2][2] - Fe[1][2] * Fe[2][1];
-    dJedFe[1][0] = Fe[0][2] * Fe[2][1] - Fe[0][1] * Fe[2][2];
-    dJedFe[2][0] = Fe[0][1] * Fe[1][2] - Fe[0][2] * Fe[1][1];
-    dJedFe[0][1] = Fe[1][2] * Fe[2][0] - Fe[1][0] * Fe[2][2];
-    dJedFe[1][1] = Fe[0][0] * Fe[2][2] - Fe[0][2] * Fe[2][0];
-    dJedFe[2][1] = Fe[0][2] * Fe[1][0] - Fe[0][0] * Fe[1][2];
-    dJedFe[0][2] = Fe[1][0] * Fe[2][1] - Fe[1][1] * Fe[2][0];
-    dJedFe[1][2] = Fe[0][1] * Fe[2][0] - Fe[0][0] * Fe[2][1];
-    dJedFe[2][2] = Fe[0][0] * Fe[1][1] - Fe[0][1] * Fe[1][0];
-    float Jp = determinant(Fp);
-    float ESnowCurrent = params.E0 * exp(params.xi * (1.0 - Jp));   // Current Young's modulus for snow
-    float muSnow = ESnowCurrent / (2.0 * (1.0 + params.nuSnow));
-    float lambdaSnow = ESnowCurrent * params.nuSnow / ((1.0 + params.nuSnow) * (1.0 - 2.0 * params.nuSnow));
-    return 2 * muSnow * (Fe - R) + lambdaSnow * (Je - 1) * dJedFe;
-  }
-  int coordinateToId(ivec3 c) {
-    return c[0] + int(params.nxG) * c[1] + int(params.nxG) * int(params.nyG) * c[2];
-  }
-  void main() {
-    uint indexI = gl_GlobalInvocationID.x;
-    uint indexJ = gl_GlobalInvocationID.y;
-    uint indexK = gl_GlobalInvocationID.z;
-    if (indexI >= params.nxG || indexJ >= params.nyG || indexK >= params.nzG) { return; }
-    
-    int baseNodeI = int(indexI);
-    int baseNodeJ = int(indexJ);
-    int baseNodeK = int(indexK);
-    int nodeID = coordinateToId(ivec3(baseNodeI, baseNodeJ, baseNodeK));
-    vec3 minCorner = vec3(params.minCornerX, params.minCornerY, params.minCornerZ);
-    for (int p = 0; p < ${numPArg}; p++) {
-      vec3 posP_index_space = (particles1.data[p].pos.xyz - minCorner) / params.h;
-      if (abs(posP_index_space.x - baseNodeI) < 1.5 &&
-          abs(posP_index_space.y - baseNodeJ) < 1.5 &&
-          abs(posP_index_space.z - baseNodeK) < 1.5) {
-            mat3 termJello, termSnow;
-            float termFluid;
-            int materialType = int(round(particles1.data[p].pos.w));
-            if (materialType == 0) {  // JELLO
-              mat3 FP = particles2.data[p].F;
-              mat3 P = fixedCorotated(FP);
-              termJello = -1 * particles2.data[p].vol * P * transpose(FP);
-            } else if (materialType == 1) { // SNOW
-              mat3 FeP = particles2.data[p].Fe;
-              mat3 FpP = particles2.data[p].Fp;
-              mat3 P = fixedCorotatedSnow(FeP, FpP);
-              termSnow = -1 * particles2.data[p].vol * P * transpose(FeP);
-            } else if (materialType == 2) { // FLUID
-              float J = particles2.data[p].J;
-              float dPhidJ = -params.lambdaFluid * (pow(J, -params.gamma) - 1);
-              termFluid = -1 * particles2.data[p].vol * dPhidJ * J;
-            } else {
-            }
-            float wI, wJ, wK;
-            float dwI, dwJ, dwK;
-            // Finding weight, gradient weight in the x-direction
-            computeWeights1D_G(baseNodeI, posP_index_space.x, wI, dwI);
-            // Finding weight, gradient weight in the y-direction
-            computeWeights1D_G(baseNodeJ, posP_index_space.y, wJ, dwJ);
-            // Finding weight, gradient weight in the z-direction
-            computeWeights1D_G(baseNodeK, posP_index_space.z, wK, dwK);
-            vec3 grad_weightIJK = vec3(dwI * wJ * wK / params.h,
+
+  @compute @workgroup_size(64)
+  fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let indexI = global_id.x;
+    let indexJ = global_id.y;
+    let indexK = global_id.z;
+    if (indexI >= u32(params.nxG) || indexJ >= u32(params.nyG) || indexK >= u32(params.nzG)) { return; }
+
+    let nodeID = coordinateToId(vec3<i32>(i32(indexI), i32(indexJ), i32(indexK)));
+    var minCorner = vec3<f32>(params.minCornerX, params.minCornerY, params.minCornerZ);
+
+    for (var p: i32 = 0; p < ${numPArg}; p++) {
+      let posP_index_space = (particles1[p].pos.xyz - minCorner) / params.h;
+      if (all(abs(posP_index_space - vec3<f32>(f32(indexI), f32(indexJ), f32(indexK))) < vec3<f32>(1.5))) {
+        var materialType = i32(round(particles1[p].pos.w));
+        var termJello: mat3x3<f32>;
+        var termSnow: mat3x3<f32>;
+        var termFluid: f32;
+
+        if (materialType == 0) {  // JELLO
+          let FP = particles2[p].F;
+          let P = fixedCorotated(FP);
+          termJello = -1.0 * particles2[p].vol * P * transpose(FP);
+        } else if (materialType == 1) { // SNOW
+          let FeP = particles2[p].Fe;
+          let FpP = particles2[p].Fp;
+          let P = fixedCorotatedSnow(FeP, FpP);
+          termSnow = -1.0 * particles2[p].vol * P * transpose(FeP);
+        } else if (materialType == 2) { // FLUID
+          let J = particles2[p].J;
+          let dPhidJ = -params.lambdaFluid * (pow(J, -params.gamma) - 1.0);
+          termFluid = -1.0 * particles2[p].vol * dPhidJ * J;
+        }
+
+        var wI: f32;
+        var wJ: f32;
+        var wK: f32;
+        var dwI: f32;
+        var dwJ: f32;
+        var dwK: f32;
+        computeWeights1D_G(i32(indexI), posP_index_space.x, &wI, &dwI);
+        computeWeights1D_G(i32(indexJ), posP_index_space.y, &wJ, &dwJ);
+        computeWeights1D_G(i32(indexK), posP_index_space.z, &wK, &dwK);
+        let grad_weightIJK = vec3<f32>(dwI * wJ * wK / params.h,
                                        wI * dwJ * wK / params.h,
                                        wI * wJ * dwK / params.h);
-            if (materialType == 0) {  // JELLO
-              gridNodes.data[nodeID].force += termJello * grad_weightIJK;
-            } else if (materialType == 1) { // SNOW
-              gridNodes.data[nodeID].force += termSnow * grad_weightIJK;
-            } else if (materialType == 2) { // FLUID
-              gridNodes.data[nodeID].force += termFluid * grad_weightIJK;
-            } else {
-            }
-          }
+
+        if (materialType == 0) {  // JELLO
+          gridNodes[nodeID].force += termJello * grad_weightIJK;
+        } else if (materialType == 1) { // SNOW
+          gridNodes[nodeID].force += termSnow * grad_weightIJK;
+        } else if (materialType == 2) { // FLUID
+          gridNodes[nodeID].force += termFluid * grad_weightIJK;
+        }
+      }
     }
-    // Test Speed
-    // if (nodeID < ${numPArg}) {
-    //   particles1.data[nodeID].pos += vec4(vec3(0, 0.01, 0), 0);
-    // }
-    // mat3 A;
-    // A[0] = vec3(1, -1, 0);
-    // A[1] = vec3(0, -2, 1);
-    // A[2] = vec3(1, 0, -1);
-    // SVD_mats testSVD = svd(A);
-    // mat3 UVTranspose = testSVD.U * transpose(testSVD.V);
-    // vec3 UVTranspose_expected_col0 = vec3(0.9174, -0.1735, 0.3582);
-    // vec3 UVTranspose_expected_col1 = vec3(-0.2480, -0.9531, 0.1735);
-    // vec3 UVTranspose_expected_col2 = vec3(0.3113, -0.2480, -0.9174);
-    // // SVD Tests
-    // particles1.data[index].pos += vec4(UVTranspose_expected_col0, 0);
-    // particles1.data[index].pos += vec4(-UVTranspose[0], 0);
-    // particles1.data[index].pos += vec4(UVTranspose_expected_col1, 0);
-    // particles1.data[index].pos += vec4(-UVTranspose[1], 0);
-    // particles1.data[index].pos += vec4(UVTranspose_expected_col2, 0);
-    // particles1.data[index].pos += vec4(-UVTranspose[2], 0);
-    // particles1.data[index].pos += vec4(vec3(params.nxG, params.nyG, params.nzG), 0);
-    // particles1.data[index].pos += vec4(-vec3(51, 50.5, 51), 0);
-  }`,
+  }
+  `,
 };

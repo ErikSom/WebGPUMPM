@@ -52,7 +52,7 @@ export async function init(canvas: HTMLCanvasElement, useWGSL: boolean) {
 
   function frame() {
     const commandEncoder = device.createCommandEncoder();
-    const textureView = swapChain.getCurrentTexture().createView();
+    const textureView = (context as any).getCurrentTexture().createView();
 
     const renderPassDescriptor: GPURenderPassDescriptor = {
       colorAttachments: [

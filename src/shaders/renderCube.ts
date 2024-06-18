@@ -1,41 +1,61 @@
 export const renderCubeShaders = {
-    vertex: `#version 450
-  layout(set = 0, binding = 0) uniform Uniforms {
-    mat4 matrices[3];
-  } uniforms;
-  
-  layout(location = 0) in vec4 position;
-  layout(location = 1) in vec4 normal;
-  
-  layout(location = 0) out vec4 fragLightVec;
-  layout(location = 1) out vec4 fragNorm;
-  
-  void main() {
-    mat4 view = uniforms.matrices[0];
-    mat4 invView = uniforms.matrices[1];
-    mat4 proj = uniforms.matrices[2];
-    mat4 scale = mat4(vec4(0.92, 0, 0, 0), vec4(0, 0.92, 0, 0), vec4(0, 0, 0.92, 0), vec4(0, 0, 0, 1));
-    
-    gl_Position = proj * view * scale * position;
-    fragLightVec = invView * vec4(0,0,0,1) - position;
-    fragNorm = normal;
-  }
+  vertex: `
+    @group(0) @binding(0) var<uniform> uniforms : Uniforms;
+
+    struct Uniforms {
+      matrices : array<mat4x4<f32>, 3>,
+    };
+
+    struct VertexInput {
+      @location(0) position : vec4<f32>,
+      @location(1) normal : vec4<f32>,
+    };
+
+    struct VertexOutput {
+      @builtin(position) position : vec4<f32>,
+      @location(0) fragLightVec : vec4<f32>,
+      @location(1) fragNorm : vec4<f32>,
+    };
+
+    @vertex
+    fn main(input : VertexInput) -> VertexOutput {
+      var output : VertexOutput;
+
+      let view = uniforms.matrices[0];
+      let invView = uniforms.matrices[1];
+      let proj = uniforms.matrices[2];
+      let scale = mat4x4<f32>(
+        vec4<f32>(0.92, 0.0, 0.0, 0.0),
+        vec4<f32>(0.0, 0.92, 0.0, 0.0),
+        vec4<f32>(0.0, 0.0, 0.92, 0.0),
+        vec4<f32>(0.0, 0.0, 0.0, 1.0)
+      );
+
+      output.position = proj * view * scale * input.position;
+      output.fragLightVec = invView * vec4<f32>(0.0, 0.0, 0.0, 1.0) - input.position;
+      output.fragNorm = input.normal;
+
+      return output;
+    }
   `,
-  
-    fragment: `#version 450
-  layout(location = 0) in vec4 fragLightVec;
-  layout(location = 1) in vec4 fragNorm;
-  layout(location = 0) out vec4 outColor;
-  
-  void main() {
-    vec4 diffuseColor = vec4(0.7, 0.7, 0.7, 1);
-  
-    float diffuseTerm = dot(fragNorm, normalize(fragLightVec));
-    diffuseTerm = clamp(diffuseTerm, 0, 1);
-    float ambientTerm = 0.2;
-    float lightIntensity = diffuseTerm + ambientTerm;
-    outColor = diffuseColor * lightIntensity;
-    outColor.a = 0.3;
-  }
+  fragment: `
+    struct FragmentInput {
+      @location(0) fragLightVec : vec4<f32>,
+      @location(1) fragNorm : vec4<f32>,
+    };
+
+    @fragment
+    fn main(input : FragmentInput) -> @location(0) vec4<f32> {
+      let diffuseColor = vec4<f32>(0.7, 0.7, 0.7, 1.0);
+
+      var diffuseTerm = dot(input.fragNorm, normalize(input.fragLightVec));
+      diffuseTerm = clamp(diffuseTerm, 0.0, 1.0);
+      let ambientTerm = 0.2;
+      let lightIntensity = diffuseTerm + ambientTerm;
+      var outColor = diffuseColor * lightIntensity;
+      outColor.a = 0.3;
+
+      return outColor;
+    }
   `,
-  };
+};

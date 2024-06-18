@@ -54,6 +54,9 @@ export const sweepIters = ilog2ceil(numGPadded) - 1;  // Number of iterations to
 export const gData = new Float32Array(numG * 16);
 export const gSCData = new Float32Array(numGPadded * 4);
 
+console.log("Check origin")
+console.trace();
+
 // compute the remaining particle parameters and export p1Data particle buffer
 let volumeP = h * h * h / 8.0;
 let materialMasses : number[] = [volumeP * rhoJello, volumeP * rhoSnow, volumeP * rhoFluid];

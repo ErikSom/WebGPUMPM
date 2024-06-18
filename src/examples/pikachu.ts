@@ -48,36 +48,36 @@ export async function init(canvas: HTMLCanvasElement, useWGSL: boolean) {
   const context = canvas.getContext('gpupresent');
    
   // other boilerplate operations
-  const swapChain = boilerplate.getSwapChain(device, context);
+  const swapChain = boilerplate.setupSwapChain(device, context);
   const depthTexture = boilerplate.getDepthTexture(device, canvas);
   const renderPassDescriptor = boilerplate.getRenderPassDescriptor(depthTexture);
 
   // create and compile pipelines for rendering and computation
-  const renderPipeline = createRenderingPipeline(renderingShaders, device, glslang);
-  const computePipeline = createComputePipeline(exampleShaders.compute(numP, numG, numGPadded), device, glslang);
-  const addMaterialForcePipeline = createComputePipeline(addMaterialForceShader.addMaterialForce(numP, numG, numGPadded), device, glslang);
-  const addGravityPipeline = createComputePipeline(addGravityShader.addGravity(numP, numG, numGPadded), device, glslang);
-  const clearGridDataPipeline = createComputePipeline(clearGridDataShader.clearGridData(numP, numG, numGPadded), device, glslang);
-  const setBoundaryVelocitiesPipeline = createComputePipeline(setBoundaryVelocitiesShader.setBoundaryVelocities(numP, numG, numGPadded), device, glslang);
-  const updateGridVelocityPipeline = createComputePipeline(updateGridVelocityShader.updateGridVelocity(numP, numG, numGPadded), device, glslang);
-  const p2gPipeline = createComputePipeline(p2gShader.p2g(numP, numG, numGPadded), device, glslang);
-  const g2pPipeline = createComputePipeline(g2pShader.g2p(numP, numG, numGPadded), device, glslang);
-  const evolveFandJPipeline = createComputePipeline(evolveFandJShader.evolveFandJ(numP, numG, numGPadded), device, glslang);
-  const p2g_PPipeline = createComputePipeline(p2g_PShader.p2g_P(numP, numG, numGPadded), device, glslang);
-  const addMaterialForce_PPipeline = createComputePipeline(addMaterialForce_PShader.addMaterialForce_P(numP, numG, numGPadded), device, glslang);
+  const renderPipeline = createRenderingPipeline(renderingShaders, device);
+  const computePipeline = createComputePipeline(exampleShaders.compute(numP, numG, numGPadded), device);
+  const addMaterialForcePipeline = createComputePipeline(addMaterialForceShader.addMaterialForce(numP, numG, numGPadded), device);
+  const addGravityPipeline = createComputePipeline(addGravityShader.addGravity(numP, numG, numGPadded), device);
+  const clearGridDataPipeline = createComputePipeline(clearGridDataShader.clearGridData(numP, numG, numGPadded), device);
+  const setBoundaryVelocitiesPipeline = createComputePipeline(setBoundaryVelocitiesShader.setBoundaryVelocities(numP, numG, numGPadded), device);
+  const updateGridVelocityPipeline = createComputePipeline(updateGridVelocityShader.updateGridVelocity(numP, numG, numGPadded), device);
+  const p2gPipeline = createComputePipeline(p2gShader.p2g(numP, numG, numGPadded), device);
+  const g2pPipeline = createComputePipeline(g2pShader.g2p(numP, numG, numGPadded), device);
+  const evolveFandJPipeline = createComputePipeline(evolveFandJShader.evolveFandJ(numP, numG, numGPadded), device);
+  const p2g_PPipeline = createComputePipeline(p2g_PShader.p2g_P(numP, numG, numGPadded), device);
+  const addMaterialForce_PPipeline = createComputePipeline(addMaterialForce_PShader.addMaterialForce_P(numP, numG, numGPadded), device);
 
-  const getCriteriaPipeline = createComputePipeline(getCriteriaShader.getCriteria(numP, numG, numGPadded), device, glslang);
-  const upSweepPipeline = createComputePipeline(upSweepShader.upSweep(numP, numG, numGPadded), device, glslang);
-  const setRootToZeroPipeline = createComputePipeline(setRootToZeroShader.setRootToZero(numP, numG, numGPadded), device, glslang);
-  const downSweepPipeline = createComputePipeline(downSweepShader.downSweep(numP, numG, numGPadded), device, glslang);
-  const scatterPipeline = createComputePipeline(scatterShader.scatter(numP, numG, numGPadded), device, glslang);
-  const clearSCPipeline = createComputePipeline(clearSCShader.clearSC(numP, numG, numGPadded), device, glslang);
+  const getCriteriaPipeline = createComputePipeline(getCriteriaShader.getCriteria(numP, numG, numGPadded), device);
+  const upSweepPipeline = createComputePipeline(upSweepShader.upSweep(numP, numG, numGPadded), device);
+  const setRootToZeroPipeline = createComputePipeline(setRootToZeroShader.setRootToZero(numP, numG, numGPadded), device);
+  const downSweepPipeline = createComputePipeline(downSweepShader.downSweep(numP, numG, numGPadded), device);
+  const scatterPipeline = createComputePipeline(scatterShader.scatter(numP, numG, numGPadded), device);
+  const clearSCPipeline = createComputePipeline(clearSCShader.clearSC(numP, numG, numGPadded), device);
 
   // For Testing Purposes
-  const testPipeline = createComputePipeline(testShader.test(numP, numG, numGPadded), device, glslang); // For testing purposes
+  const testPipeline = createComputePipeline(testShader.test(numP, numG, numGPadded), device); // For testing purposes
   
   // Render Cube Pipeline
-  const renderCubePipeline = createRenderCubePipeline(renderCubeShaders, device, glslang);
+  const renderCubePipeline = createRenderCubePipeline(renderCubeShaders, device);
 
   // create GPU Buffers
   const simParamBuffer = createBuffer(simParamData, GPUBufferUsage.UNIFORM, device);  
@@ -121,7 +121,7 @@ export async function init(canvas: HTMLCanvasElement, useWGSL: boolean) {
     // prepare for the render pass
     const transformationMatrix = getTransformationMatrix(view); // gets a transformation matrix (modelViewProjection)
     writeBuffer(device, uniformBuffer, transformationMatrix);
-    renderPassDescriptor.colorAttachments[0].attachment = swapChain.getCurrentTexture().createView();
+    renderPassDescriptor.colorAttachments[0].attachment = (context as any).getCurrentTexture().createView();
     
     // record and execute command sequence on the gpu
     const commandEncoder = device.createCommandEncoder({measureExecutionTime: true});

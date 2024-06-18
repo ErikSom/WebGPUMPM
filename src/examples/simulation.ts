@@ -1,4 +1,3 @@
-import glslangModule from '../glslang';
 import { mat4 } from 'gl-matrix';
 import { exampleShaders } from '../shaders/shaders';
 import { p2gShader } from '../shaders/p2g';
@@ -43,50 +42,52 @@ export const description = 'A hybrid Eulerian/Lagrangian method for the simulati
 export async function init(canvas: HTMLCanvasElement, useWGSL: boolean) {
   // setup webgpu device, context, and glsl compiler
   const adapter = await navigator.gpu.requestAdapter({powerPreference : "high-performance"});
-  const device = await adapter.requestDevice({extensions: ["timestamp-query"]});
-  const glslang = await glslangModule();
-  const context = canvas.getContext('gpupresent');
-   
+  // @ts-ignore
+  const device = await adapter.requestDevice({requiredFeatures: ['timestamp-query'],});
+  const context = canvas.getContext('webgpu');
+
   // other boilerplate operations
-  const swapChain = boilerplate.getSwapChain(device, context);
+  boilerplate.setupSwapChain(device, context as any);
   const depthTexture = boilerplate.getDepthTexture(device, canvas);
   const renderPassDescriptor = boilerplate.getRenderPassDescriptor(depthTexture);
 
   // create and compile pipelines for rendering and computation
-  const renderPipeline = createRenderingPipeline(renderingShaders, device, glslang);
-  const computePipeline = createComputePipeline(exampleShaders.compute(numP, numG, numGPadded), device, glslang);
-  const addMaterialForcePipeline = createComputePipeline(addMaterialForceShader.addMaterialForce(numP, numG, numGPadded), device, glslang);
-  const addGravityPipeline = createComputePipeline(addGravityShader.addGravity(numP, numG, numGPadded), device, glslang);
-  const clearGridDataPipeline = createComputePipeline(clearGridDataShader.clearGridData(numP, numG, numGPadded), device, glslang);
-  const setBoundaryVelocitiesPipeline = createComputePipeline(setBoundaryVelocitiesShader.setBoundaryVelocities(numP, numG, numGPadded), device, glslang);
-  const updateGridVelocityPipeline = createComputePipeline(updateGridVelocityShader.updateGridVelocity(numP, numG, numGPadded), device, glslang);
-  const p2gPipeline = createComputePipeline(p2gShader.p2g(numP, numG, numGPadded), device, glslang);
-  const g2pPipeline = createComputePipeline(g2pShader.g2p(numP, numG, numGPadded), device, glslang);
-  const evolveFandJPipeline = createComputePipeline(evolveFandJShader.evolveFandJ(numP, numG, numGPadded), device, glslang);
-  const p2g_PPipeline = createComputePipeline(p2g_PShader.p2g_P(numP, numG, numGPadded), device, glslang);
-  const addMaterialForce_PPipeline = createComputePipeline(addMaterialForce_PShader.addMaterialForce_P(numP, numG, numGPadded), device, glslang);
+  const renderPipeline = createRenderingPipeline(renderingShaders, device);
+  const computePipeline = createComputePipeline(exampleShaders.compute(numP, numG, numGPadded), device);
+  const addMaterialForcePipeline = createComputePipeline(addMaterialForceShader.addMaterialForce(numP, numG, numGPadded), device);
+  const addGravityPipeline = createComputePipeline(addGravityShader.addGravity(numP, numG, numGPadded), device);
+  
+  const clearGridDataPipeline = createComputePipeline(clearGridDataShader.clearGridData(numP, numG, numGPadded), device);
+  const setBoundaryVelocitiesPipeline = createComputePipeline(setBoundaryVelocitiesShader.setBoundaryVelocities(numP, numG, numGPadded), device);
+  const updateGridVelocityPipeline = createComputePipeline(updateGridVelocityShader.updateGridVelocity(numP, numG, numGPadded), device);
+  const p2gPipeline = createComputePipeline(p2gShader.p2g(numP, numG, numGPadded), device);
+  const g2pPipeline = createComputePipeline(g2pShader.g2p(numP, numG, numGPadded), device);
+  const evolveFandJPipeline = createComputePipeline(evolveFandJShader.evolveFandJ(numP, numG, numGPadded), device);
+  const p2g_PPipeline = createComputePipeline(p2g_PShader.p2g_P(numP, numG, numGPadded), device);
+  const addMaterialForce_PPipeline = createComputePipeline(addMaterialForce_PShader.addMaterialForce_P(numP, numG, numGPadded), device);
 
-  const getCriteriaPipeline = createComputePipeline(getCriteriaShader.getCriteria(numP, numG, numGPadded), device, glslang);
-  const upSweepPipeline = createComputePipeline(upSweepShader.upSweep(numP, numG, numGPadded), device, glslang);
-  const setRootToZeroPipeline = createComputePipeline(setRootToZeroShader.setRootToZero(numP, numG, numGPadded), device, glslang);
-  const downSweepPipeline = createComputePipeline(downSweepShader.downSweep(numP, numG, numGPadded), device, glslang);
-  const scatterPipeline = createComputePipeline(scatterShader.scatter(numP, numG, numGPadded), device, glslang);
-  const clearSCPipeline = createComputePipeline(clearSCShader.clearSC(numP, numG, numGPadded), device, glslang);
+  const getCriteriaPipeline = createComputePipeline(getCriteriaShader.getCriteria(numP, numG, numGPadded), device);
+  const upSweepPipeline = createComputePipeline(upSweepShader.upSweep(numP, numG, numGPadded), device);
+  const setRootToZeroPipeline = createComputePipeline(setRootToZeroShader.setRootToZero(numP, numG, numGPadded), device);
+  const downSweepPipeline = createComputePipeline(downSweepShader.downSweep(numP, numG, numGPadded), device);
+  const scatterPipeline = createComputePipeline(scatterShader.scatter(numP, numG, numGPadded), device);
+  const clearSCPipeline = createComputePipeline(clearSCShader.clearSC(numP, numG, numGPadded), device);
 
   // For Testing Purposes
-  const testPipeline = createComputePipeline(testShader.test(numP, numG, numGPadded), device, glslang); // For testing purposes
-  
+  const testPipeline = createComputePipeline(testShader.test(numP, numG, numGPadded), device); // For testing purposes
+
   // Render Cube Pipeline
-  const renderCubePipeline = createRenderCubePipeline(renderCubeShaders, device, glslang);
+  const renderCubePipeline = createRenderCubePipeline(renderCubeShaders, device);
+  console.log("CHECK4", addGravityPipeline)
 
   // create GPU Buffers
-  const simParamBuffer = createBuffer(simParamData, GPUBufferUsage.UNIFORM, device);  
-  const p1Buffer = createBuffer(p1Data, GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE, device);  
-  const p2Buffer = createBuffer(p2Data, GPUBufferUsage.STORAGE, device); 
-  const gBuffer = createBuffer(gData, GPUBufferUsage.STORAGE, device); 
+  const simParamBuffer = createBuffer(simParamData, GPUBufferUsage.UNIFORM, device);
+  const p1Buffer = createBuffer(p1Data, GPUBufferUsage.VERTEX | GPUBufferUsage.STORAGE, device);
+  const p2Buffer = createBuffer(p2Data, GPUBufferUsage.STORAGE, device);
+  const gBuffer = createBuffer(gData, GPUBufferUsage.STORAGE, device);
   const uniformBuffer = createEmptyUniformBuffer(4 * 16, device); // 4x4 matrix projection matrix for render pipeline
   const gSCBuffer = createBuffer(gSCData, GPUBufferUsage.STORAGE, device);
-  
+
   const uniformBuffer2 = createEmptyUniformBuffer(3 * 4 * 16, device); // three 4x4 matrices. view, inverseView, proj.
   const uniformBufferBox = createEmptyUniformBuffer(3 * 4 * 16, device); // three 4x4 matrices. view, inverseView, proj.
   const querySetBuffer : GPUBuffer = createQueryBuffer(8*queryLength, device);
@@ -121,8 +122,8 @@ export async function init(canvas: HTMLCanvasElement, useWGSL: boolean) {
     // prepare for the render pass
     const transformationMatrix = getTransformationMatrix(view); // gets a transformation matrix (modelViewProjection)
     writeBuffer(device, uniformBuffer, transformationMatrix);
-    renderPassDescriptor.colorAttachments[0].attachment = swapChain.getCurrentTexture().createView();
-    
+    renderPassDescriptor.colorAttachments[0].view = (context as any).getCurrentTexture().createView();
+
     // record and execute command sequence on the gpu
     const commandEncoder = device.createCommandEncoder({measureExecutionTime: true});
     // // Naive Version
@@ -165,7 +166,7 @@ export async function init(canvas: HTMLCanvasElement, useWGSL: boolean) {
       runComputePipeline(commandEncoder, setBoundaryVelocitiesPipeline, bindGroup, nxG, nyG, nzG, doBenchmark, 22, query);
       runComputePipeline(commandEncoder, evolveFandJPipeline, bindGroup, numP, 1, 1, doBenchmark, 24, query);
       runComputePipeline(commandEncoder, g2pPipeline, bindGroup, numP, 1, 1, doBenchmark, 26, query);
-    }    
+    }
 
     if (doBenchmark) {
       resolveQuery(commandEncoder, query, querySetBuffer, queryReadBuffer, queryLength);
@@ -173,14 +174,14 @@ export async function init(canvas: HTMLCanvasElement, useWGSL: boolean) {
     runRenderPipeline(commandEncoder, renderPassDescriptor, renderPipeline, renderCubePipeline, uniformBindGroup2, 
                       uniformBindGroupBox, p1Buffer, cube2Buffer, numP, true, cubeParams.cubeVertexCount, cubeBuffer, doBenchmark, 28, query);
 
-                      
+
     // Test
     // runComputePipeline(commandEncoder, clearGridDataPipeline, bindGroup, nxG, nyG, nzG);
     // runComputePipeline(commandEncoder, p2g_PPipeline, bindGroup, nxG, nyG, nzG);
     // runComputePipeline(commandEncoder, testPipeline, bindGroup, numP, 1, 1);
 
-    
-    device.defaultQueue.submit([commandEncoder.finish()]);
+    // @ts-ignore
+    device.queue.submit([commandEncoder.finish()]);
 
     if (doBenchmark) {
       await queryReadBuffer.mapAsync(GPUMapMode.READ);
